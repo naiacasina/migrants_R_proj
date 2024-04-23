@@ -1,10 +1,15 @@
-# This script computes distributions of variables across states for 
-# the NAWS survey (using weights)
+# In this script we:
+#   1. Compute distributions of variables across states for the NAWS survey
+#      using weights
+#   2. Compute the merger of data SURVEY + CENSUS
 
 rm(list=ls()) 
-packages <- c("dplyr", "survey", "ggplot2", "tidyr")
+packages <- c("dplyr", "survey", "ggplot2", "tidyr", "usethis", "arrow")
 lapply(packages, require, character=TRUE)
+# for git
+setwd('~/Library/CloudStorage/OneDrive-UCB-O365/Projects/Ag Workforce/Migrants/migrants_R_proj')
 
+# change path to 'Migrants' folder
 setwd('/Users/naiacasina/Library/CloudStorage/OneDrive-UCB-O365/Projects/Ag Workforce/Migrants')
 naws_ae <- read.csv('Data/NAWS_A2E197.csv')
 naws_fz <- read.csv('Data/NAWS_F2Y197.csv')
@@ -54,46 +59,46 @@ ggplot(b17_region_df, aes(x = B17CODE, y = Region_Proportion, fill = B17CODE)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 
-
+# -----------
 # --------- Building a dataframe -------
 # -----------
 
 compute_global_bins <- function(data, variable) {
-  # calculate range across all data
+  # ranges across all data
   min_val <- min(data[[variable]], na.rm = TRUE)
   max_val <- max(data[[variable]], na.rm = TRUE)
   
-  #dDefine breaks for binning - creating 5 bins as an example
-  breaks <- seq(from = min_val, to = max_val, length.out = 6)  # Creates 5 bins
+  # define breaks for binning - creating 5 bins but can be modified
+  breaks <- seq(from = min_val, to = max_val, length.out = 6) 
   return(breaks)
 }
 
-compute_proportions <- function(variable, data, weights_col, regions, breaks=NULL) {
+compute_proportions <- function(variable, data, weights_col, regions, year_col, breaks, continuous_vars) {
   results_df <- data.frame()
   
   for (region in regions) {
-    subset_data <- data[data$REGION6 == region & !is.na(data[[variable]]), ]
-    
-    if (length(unique(subset_data[[variable]])) > 15) {
-      # use global breaks for continuous variables
-      subset_data$Category <- cut(subset_data[[variable]], breaks = breaks, include.lowest = TRUE, right = FALSE)
-    } else {
-      # treat as a categorical variablees
-      subset_data$Category <- as.factor(subset_data[[variable]])
-    }
-    
-    # calculate the sum of weights for each category
-    category_weights <- tapply(subset_data[[weights_col]], subset_data$Category, sum)
-    total_weight <- sum(category_weights, na.rm = TRUE)
-    proportions <- category_weights / total_weight
-    
-    # build category
-    for (cat in names(proportions)) {
-      results_df <- rbind(results_df, data.frame(
-        REGION6 = region,
-        Variable = paste(variable, gsub("\\((.*),.*", "\\1", cat), sep = "."),
-        Proportion = proportions[cat]
-      ))
+    for (year in unique(data[[year_col]])) {
+      subset_data <- data[data$REGION6 == region & data[[year_col]] == year & !is.na(data[[variable]]), ]
+      
+      if (variable%in%continuous_vars) {
+        subset_data$Category <- cut(subset_data[[variable]], breaks = breaks[[variable]], include.lowest = TRUE, right = FALSE)
+      } else {
+        subset_data$Category <- as.factor(subset_data[[variable]])
+      }
+      
+      category_weights <- tapply(subset_data[[weights_col]], subset_data$Category, sum)
+      total_weight <- sum(category_weights, na.rm = TRUE)
+      proportions <- category_weights / total_weight
+      
+      # category data
+      for (cat in names(proportions)) {
+        results_df <- rbind(results_df, data.frame(
+          REGION6 = region,
+          FY = year,
+          Variable = paste(variable, gsub("\\((.*),.*", "\\1", cat), sep = "."),
+          Proportion = proportions[cat]
+        ))
+      }
     }
   }
   
@@ -114,24 +119,28 @@ all_vars <- c(binary_vars, categorical_vars)
 
 continuous_vars <- c("C09WEEKS", "FWRDAYS", "FWWEEKS")
 
+# compute bins for each cont var
+global_breaks <- list()
+for (var in continuous_vars) {
+  global_breaks[[var]] <- compute_global_bins(naws_df, var)
+}
 
-# compute bins for each and apply proportions calculation
+year_col = "FY.x"
 all_results <- data.frame()
 for (var in continuous_vars) {
-  var_breaks <- compute_global_bins(naws_df, var)
-  var_results <- compute_proportions(var, naws_df, "PWTYCRD.x", unique(naws_df$REGION6), var_breaks)
+  var_results <- compute_proportions(var, naws_df, "PWTYCRD.x", sort(unique(naws_df$REGION6)), "FY.x", global_breaks, continuous_vars)
   all_results <- rbind(all_results, var_results)
 }
 
-# for categorical variables
 for (var in all_vars) {
-  var_results <- compute_proportions(var, naws_df, "PWTYCRD.x", unique(naws_df$REGION6))
+  var_results <- compute_proportions(var, naws_df, "PWTYCRD.x", unique(naws_df$REGION6), "FY.x", global_breaks, continuous_vars)
   all_results <- rbind(all_results, var_results)
 }
 
-# convert to wide format as needed
-all_results_wide <- pivot_wider(all_results, names_from = Variable, values_from = Proportion, id_cols = REGION6)
+# convert to wide format
+all_results_wide <- pivot_wider(all_results, names_from = Variable, values_from = Proportion, id_cols = c("REGION6", "FY"))
 
+# include states to regions
 region_mapping <- data.frame(
   REGION6 = 1:6,
   RegionName = c("EAST", "SOUTHEAST", "MIDWEST", "SOUTHWEST", "NORTHWEST", "CALIFORNIA"),
@@ -147,38 +156,41 @@ region_mapping <- data.frame(
 
 results_with_regions <- merge(all_results_wide, region_mapping, by = "REGION6", all.x = TRUE)
 
+write_parquet(results_with_regions, 'Results/results_with_regions.parquet')
 
-# -------- plotting -------
-plot_variable_proportions <- function(data, variable_prefix) {
-  # Create a list to collect all categories related to the variable prefix
-  variable_columns <- grep(paste0("^", variable_prefix, "\\."), names(data), value = TRUE)
-  
-  # If no columns match, provide a message and stop
-  if (length(variable_columns) == 0) {
-    stop("No variables found with the specified prefix.")
-  }
-  
-  # Gather the data from wide to long format for the specified variable categories
-  long_data <- tidyr::pivot_longer(data, 
-                                   cols = variable_columns,
-                                   names_to = "Category",
-                                   values_to = "Proportion",
-                                   names_prefix = paste0(variable_prefix, "\\."))
-  
-  # Filter out rows with NA proportions if any
-  long_data <- long_data[!is.na(long_data$Proportion), ]
-  
-  # Create the plot
-  p <- ggplot(long_data, aes(x = Category, y = Proportion, fill = RegionName)) +
-    geom_bar(stat = "identity", position = position_dodge()) +
-    facet_wrap(~RegionName, scales = "free_x") +
-    labs(x = "Category", y = "Proportion", title = paste("Proportions for", variable_prefix)) +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x labels for better readability
-  
-  print(p)
-}
+# --------------- merger ------------------
+census_df <- read.csv('Data/Census/4C67A6C4-B9CF-3BF3-ADD0-DE0FA24A2A09.csv')
+census_df <- census_df %>%
+  filter(Year %in% c(2017, 2012))
+results_with_regions$States <- strsplit(as.character(results_with_regions$States), ",\\s*")
 
-# Example usage of the updated function
-plot_variable_proportions(results_with_regions, "CROP")
+# Create a new dataframe where each state has its own row with the corresponding REGION6 data
+results_expanded <- results_with_regions %>%
+  tidyr::unnest(States) %>%
+  rename(State = States) %>%
+  distinct()
+
+# Trim whitespace from the State names
+results_expanded$State <- toupper(results_expanded$State)
+
+census_df$Year <- as.integer(census_df$Year)
+results_expanded$FY <- as.integer(results_expanded$FY)
+
+merged_data <- merge(census_df, results_expanded, by.x = c("State", "Year"), by.y = c("State", "FY"), all.x = TRUE)
+
+cleaned_data <- merged_data %>%
+  select(where(~ !all(is.na(.))))
+
+cleaned_data <- cleaned_data %>%
+  filter(State != "ALASKA" & State != "HAWAII")
+
+wide_data <- cleaned_data %>%
+  pivot_wider(
+    names_from = Domain.Category, 
+    values_from = c("Value", "CV...."),
+    names_sep = "_"
+  )
+
+write_parquet(wide_data, 'Results/migrants_merger.parquet')
+write.csv(wide_data, 'Results/migrants_merger.csv')
 
