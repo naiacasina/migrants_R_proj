@@ -7,7 +7,7 @@
 #      'Figures/' folder.
 
 rm(list=ls()) 
-packages <- c("dplyr", "survey", "ggplot2", "tidyr", "usethis", "arrow")
+packages <- c("dplyr", "survey", "ggplot2", "tidyr", "usethis", "arrow", "readr")
 lapply(packages, require, character=TRUE)
 
 # change path to 'Migrants' folder
@@ -25,11 +25,13 @@ plot_variable_proportions <- function(data, variable_prefix) {
   }
   
   data$FY <- factor(data$FY)
+  data$MIGRANT <- factor(data$MIGRANT, labels = c("Non-Migrant", "Migrant"))  # Labeling for clarity in plots
   
   # wide to long
   long_data <- data %>%
+    select(all_of(variable_columns), everything()) %>%  # Use `all_of` for column selection
     pivot_longer(
-      cols = variable_columns,
+      cols = all_of(variable_columns),  # Using `all_of` here
       names_to = "Category",
       values_to = "Proportion",
       names_prefix = paste0(variable_prefix, "\\.")
@@ -38,9 +40,15 @@ plot_variable_proportions <- function(data, variable_prefix) {
   
   long_data <- long_data[!is.na(long_data$Proportion), ]
   
-  p <- ggplot(long_data, aes(x = Category, y = Proportion, fill = RegionName, alpha = Year)) +
-    geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-    scale_alpha_manual(values = c(0.5, 1), guide = guide_legend(title = "Year")) +  # Adjust opacities and show legend
+  # Set manual alpha values
+  unique_years <- sort(unique(long_data$Year))
+  alpha_values <- seq(0.3, 1, length.out = length(unique_years))  # Create a sequence from 0.5 to 1 for alpha values
+  names(alpha_values) <- unique_years
+  
+  p <- ggplot(long_data, aes(x = Category, y = Proportion, fill = MIGRANT, alpha = Year)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.7) +
+    scale_fill_manual(values = c("Non-Migrant" = "#FC8D62", "Migrant" = "#66C2A5"), name = "Migrant Status") +
+    scale_alpha_manual(values = alpha_values, guide = guide_legend(title = "Year")) +  # Manually set alpha values
     facet_wrap(~RegionName, scales = "free_x") +
     labs(x = "Category", y = "Proportion", title = paste("Proportions for", variable_prefix)) +
     theme_minimal() +
@@ -50,5 +58,5 @@ plot_variable_proportions <- function(data, variable_prefix) {
   ggsave(fig_path, plot = p, width = 10, height = 8, units = "in", dpi = 300)
 }
 
-plot_variable_proportions(results_with_regions, "GENDER")
+plot_variable_proportions(results_with_regions, "CROP")
 

@@ -3,7 +3,7 @@
 
 ## Files
 1. migrants_stats.R: Computes distributions of variables across states for the NAWS survey using weights and performs the merger of survey and census data.
-2. migrants_plots.R: Plots the proportions across any stored variables. The function plot_variable_proportions() takes on two inputs: the data, and the variable that we'd like to plot. Choose the variable and run the function. This will print the results and save the figure to the 'Figures/' folder.
+2. migrants_plots.R: Plots the proportions across any stored variables. The function plot_variable_proportions() takes on two inputs: the data, and the variable that we'd like to plot. The output creates different bins for years 2012 and 2017 and categories "Migrant" and "Non-migrant". Choose the variable and run the function. This will print the results and save the figure to the 'Figures/' folder.
 
 ## Data
 ### Census Data 
@@ -11,7 +11,7 @@
 - Source: USDA National Agricultural Statistics Service, https://quickstats.nass.usda.gov/.
 - Scope: Attempts to cover every individual within the population, capturing comprehensive demographic and occupational data.
 - Time-span: Every 5 years, available from 2012. Last year: 2022.
-- Coverage: National level, with data granularity down to the county level. However, this project primarily utilizes state-level data due to variations in data accuracy at more granular levels when it comes to merging with survey data.
+- Coverage: National level, with data granularity down to the county level. However, this project primarily uses state-level data due to variations in data accuracy at more granular levels when it comes to merging with survey data.
 
 ### Survey data
 
