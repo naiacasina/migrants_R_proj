@@ -11,7 +11,7 @@
 - Source: USDA National Agricultural Statistics Service, https://quickstats.nass.usda.gov/.
 - Scope: Attempts to cover every individual within the population, capturing comprehensive demographic and occupational data.
 - Time-span: Every 5 years, available from 2012. Last year: 2022.
-- Coverage: National level, with data granularity down to the county level. However, this project primarily uses state-level data due to variations in data accuracy at more granular levels when it comes to merging with survey data.
+- Coverage: National level, with data granularity down to the county level. This project primarily uses state-level data.
 
 ### Survey data
 
@@ -24,7 +24,7 @@
   
 ## Methodology 
 1. Data Matching: The survey data is matched to corresponding regions within the census data to ensure geographic alignment, under the assumption stated above. Continuous variables are first categorized before proportion calculation. Up to 5 categories are considered and this can be modified in the code. 
-2. Assumptions: The survey data, while not representative at the county level, is considered representative at the state level for specific variables. This approach assumes that regional divisions within the survey are based on homogeneity across the states considered, thereby justifying uniform application across each state within a region.
+2. Assumptions: The survey data, while not representative at the county level, is assumed to be representative at the state level for specific variables. This approach assumes that regional divisions within the survey are based on homogeneity across the states considered, thereby justifying uniform application across each state within a region.
 
 ## Future Considerations
 - Data Enrichment: Consider integrating ancillary variables that could allow for more nuanced analysis across states, such as household size variations.
